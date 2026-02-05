@@ -92,21 +92,21 @@ jobs:
       - name: List packages
         run: ls -R npm || true
 
-      - name: Publish main package
-        run: |
-          npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
       - name: Publish platform packages
         run: |
           for dir in npm/*/; do
             if [ -d "$dir" ]; then
               echo "Publishing $dir"
               cd "$dir"
-              npm publish --access public --provenance || true
+              npm publish --access public --provenance
               cd ../..
             fi
           done
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish main package
+        run: |
+          npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
