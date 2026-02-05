@@ -1,0 +1,44 @@
+{
+  "name": "stratadb-linux-x64-musl",
+  "version": "0.6.0",
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "main": "stratadb.linux-x64-musl.node",
+  "files": [
+    "stratadb.linux-x64-musl.node"
+  ],
+  "description": "Node.js SDK for StrataDB - an embedded database for AI agents",
+  "keywords": [
+    "stratadb",
+    "database",
+    "embedded",
+    "ai",
+    "agents",
+    "vector",
+    "kv-store",
+    "napi-rs"
+  ],
+  "author": "StrataDB Labs",
+  "homepage": "https://stratadb.org",
+  "license": "MIT",
+  "engines": {
+    "node": ">= 16"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stratadb-labs/strata-node.git"
+  },
+  "bugs": {
+    "url": "https://github.com/stratadb-labs/strata-node/issues"
+  },
+  "libc": [
+    "musl"
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "name": "stratadb-darwin-x64",
+  "version": "0.6.0",
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "main": "stratadb.darwin-x64.node",
+  "files": [
+    "stratadb.darwin-x64.node"
+  ],
+  "description": "Node.js SDK for StrataDB - an embedded database for AI agents",
+  "keywords": [
+    "stratadb",
+    "database",
+    "embedded",
+    "ai",
+    "agents",
+    "vector",
+    "kv-store",
+    "napi-rs"
+  ],
+  "author": "StrataDB Labs",
+  "homepage": "https://stratadb.org",
+  "license": "MIT",
+  "engines": {
+    "node": ">= 16"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stratadb-labs/strata-node.git"
+  },
+  "bugs": {
+    "url": "https://github.com/stratadb-labs/strata-node/issues"
+  }
+}
