@@ -86,13 +86,8 @@ jobs:
       - name: Move artifacts
         run: npm run artifacts
 
-      - name: Prepare npm packages
-        run: npm run prepublishOnly
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: List packages
-        run: ls -R npm || true
+        run: ls -R npm
 
       - name: Setup npm auth
         run: |
