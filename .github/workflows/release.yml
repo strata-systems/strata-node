@@ -92,13 +92,20 @@ jobs:
       - name: List packages
         run: ls -R npm || true
 
+      - name: Debug token
+        run: |
+          echo "Token length: ${#NODE_AUTH_TOKEN}"
+          echo "Token prefix: ${NODE_AUTH_TOKEN:0:4}"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
       - name: Publish platform packages
         run: |
           for dir in npm/*/; do
             if [ -d "$dir" ]; then
               echo "Publishing $dir"
               cd "$dir"
-              npm publish --access public --provenance
+              npm publish --access public
               cd ../..
             fi
           done
@@ -107,6 +114,6 @@ jobs:
 
       - name: Publish main package
         run: |
-          npm publish --access public --provenance
+          npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
