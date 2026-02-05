@@ -1,3 +1,3 @@
-# `stratadb-linux-arm64-gnu`
+# `@stratadb/core-linux-arm64-gnu`
 
-This is the **aarch64-unknown-linux-gnu** binary for `stratadb`
+This is the **aarch64-unknown-linux-gnu** binary for `@stratadb/core`

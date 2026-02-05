@@ -1,3 +1,3 @@
-# `stratadb-linux-x64-gnu`
+# `@stratadb/core-linux-x64-gnu`
 
-This is the **x86_64-unknown-linux-gnu** binary for `stratadb`
+This is the **x86_64-unknown-linux-gnu** binary for `@stratadb/core`

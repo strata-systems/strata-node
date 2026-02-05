@@ -1,5 +1,5 @@
 {
-  "name": "stratadb-linux-x64-gnu",
+  "name": "@stratadb/core-linux-x64-gnu",
   "version": "0.6.0",
   "os": [
     "linux"

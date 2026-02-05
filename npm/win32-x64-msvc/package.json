@@ -1,5 +1,5 @@
 {
-  "name": "stratadb-win32-x64-msvc",
+  "name": "@stratadb/core-win32-x64-msvc",
   "version": "0.6.0",
   "os": [
     "win32"

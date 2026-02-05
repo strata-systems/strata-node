@@ -1,3 +1,3 @@
-# `stratadb-darwin-x64`
+# `@stratadb/core-darwin-x64`
 
-This is the **x86_64-apple-darwin** binary for `stratadb`
+This is the **x86_64-apple-darwin** binary for `@stratadb/core`

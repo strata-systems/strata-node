@@ -1,5 +1,5 @@
 {
-  "name": "stratadb-darwin-x64",
+  "name": "@stratadb/core-darwin-x64",
   "version": "0.6.0",
   "os": [
     "darwin"

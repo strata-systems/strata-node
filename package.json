@@ -1,5 +1,5 @@
 {
-  "name": "stratadb",
+  "name": "@stratadb/core",
   "version": "0.6.0",
   "description": "Node.js SDK for StrataDB - an embedded database for AI agents",
   "main": "index.js",
@@ -57,11 +57,11 @@
     "access": "public"
   },
   "optionalDependencies": {
-    "stratadb-darwin-arm64": "0.6.0",
-    "stratadb-darwin-x64": "0.6.0",
-    "stratadb-linux-arm64-gnu": "0.6.0",
-    "stratadb-linux-arm64-musl": "0.6.0",
-    "stratadb-linux-x64-gnu": "0.6.0",
-    "stratadb-linux-x64-musl": "0.6.0"
+    "@stratadb/core-darwin-arm64": "0.6.0",
+    "@stratadb/core-darwin-x64": "0.6.0",
+    "@stratadb/core-linux-arm64-gnu": "0.6.0",
+    "@stratadb/core-linux-arm64-musl": "0.6.0",
+    "@stratadb/core-linux-x64-gnu": "0.6.0",
+    "@stratadb/core-linux-x64-musl": "0.6.0"
   }
 }
