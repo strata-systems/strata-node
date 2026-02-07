@@ -161,6 +161,14 @@ export interface SearchHit {
   snippet?: string;
 }
 
+/** Options for opening a database */
+export interface OpenOptions {
+  /** Enable automatic text embedding for semantic search. */
+  autoEmbed?: boolean;
+  /** Open in read-only mode. */
+  readOnly?: boolean;
+}
+
 /**
  * StrataDB database handle.
  *
@@ -170,13 +178,26 @@ export class Strata {
   /**
    * Open a database at the given path.
    * @param path - Path to the database directory
+   * @param options - Optional configuration (autoEmbed, readOnly)
    */
-  static open(path: string): Strata;
+  static open(path: string, options?: OpenOptions): Strata;
 
   /**
    * Create an in-memory database (no persistence).
    */
   static cache(): Strata;
+
+  /**
+   * Download model files for auto-embedding.
+   *
+   * Downloads MiniLM-L6-v2 model files to ~/.stratadb/models/minilm-l6-v2/.
+   * Called automatically when autoEmbed is true, but can be called explicitly
+   * to pre-download (e.g., during npm install).
+   *
+   * @returns The path where model files are stored.
+   * @throws Error if the download fails or embed feature is not enabled.
+   */
+  static setup(): string;
 
   // =========================================================================
   // KV Store
