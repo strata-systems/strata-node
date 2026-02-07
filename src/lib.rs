@@ -10,11 +10,20 @@ use std::collections::HashMap;
 use std::cell::RefCell;
 
 use stratadb::{
-    BatchVectorEntry, BranchExportResult, BranchImportResult, BundleValidateResult,
+    AccessMode, BatchVectorEntry, BranchExportResult, BranchImportResult, BundleValidateResult,
     CollectionInfo, Command, DistanceMetric, Error as StrataError, FilterOp, MergeStrategy,
-    MetadataFilter, Output, Session, Strata as RustStrata, TxnOptions, Value,
+    MetadataFilter, OpenOptions, Output, Session, Strata as RustStrata, TxnOptions, Value,
     VersionedBranchInfo, VersionedValue,
 };
+
+/// Options for opening a database.
+#[napi(object)]
+pub struct JsOpenOptions {
+    /// Enable automatic text embedding for semantic search.
+    pub auto_embed: Option<bool>,
+    /// Open in read-only mode.
+    pub read_only: Option<bool>,
+}
 
 /// Convert a JavaScript value to a stratadb Value.
 fn js_to_value(val: serde_json::Value) -> Value {
@@ -139,9 +148,32 @@ pub struct Strata {
 #[napi]
 impl Strata {
     /// Open a database at the given path.
+    ///
+    /// Options:
+    ///   - autoEmbed: Enable automatic text embedding for semantic search.
+    ///   - readOnly: Open in read-only mode.
     #[napi(factory)]
-    pub fn open(path: String) -> napi::Result<Self> {
-        let inner = RustStrata::open(&path).map_err(to_napi_err)?;
+    pub fn open(path: String, options: Option<JsOpenOptions>) -> napi::Result<Self> {
+        let auto_embed = options.as_ref().and_then(|o| o.auto_embed).unwrap_or(false);
+        let read_only = options.as_ref().and_then(|o| o.read_only).unwrap_or(false);
+
+        // Auto-download model files when autoEmbed is requested (best-effort).
+        #[cfg(feature = "embed")]
+        if auto_embed {
+            if let Err(e) = strata_intelligence::embed::download::ensure_model() {
+                eprintln!("Warning: failed to download model files: {}", e);
+            }
+        }
+
+        let mut opts = OpenOptions::new();
+        if auto_embed {
+            opts = opts.auto_embed(true);
+        }
+        if read_only {
+            opts = opts.access_mode(AccessMode::ReadOnly);
+        }
+
+        let inner = RustStrata::open_with(&path, opts).map_err(to_napi_err)?;
         Ok(Self {
             inner,
             session: RefCell::new(None),
@@ -1154,6 +1186,30 @@ impl Strata {
             }
             _ => Err(napi::Error::from_reason("Unexpected output for Search")),
         }
+    }
+}
+
+/// Download model files for auto-embedding.
+///
+/// Downloads MiniLM-L6-v2 model files to ~/.stratadb/models/minilm-l6-v2/.
+/// Called automatically when `autoEmbed` is true in `Strata.open()`, but can
+/// be called explicitly to pre-download (e.g., during npm install).
+///
+/// Returns the path where model files are stored.
+#[napi]
+pub fn setup() -> napi::Result<String> {
+    #[cfg(feature = "embed")]
+    {
+        let path = strata_intelligence::embed::download::ensure_model()
+            .map_err(|e| napi::Error::from_reason(e))?;
+        Ok(path.to_string_lossy().into_owned())
+    }
+
+    #[cfg(not(feature = "embed"))]
+    {
+        Err(napi::Error::from_reason(
+            "The 'embed' feature is not enabled in this build",
+        ))
     }
 }
 
