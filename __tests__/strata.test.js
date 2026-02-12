@@ -592,6 +592,40 @@ describe('Strata', () => {
   });
 
   // =========================================================================
+  // Configuration
+  // =========================================================================
+
+  describe('Configuration', () => {
+    test('config returns defaults', async () => {
+      const cfg = await db.config();
+      expect(cfg.durability).toBe('standard');
+      expect(cfg.autoEmbed).toBe(false);
+      expect(cfg.model).toBeNull();
+    });
+
+    test('autoEmbedEnabled returns false by default', async () => {
+      const enabled = await db.autoEmbedEnabled();
+      expect(enabled).toBe(false);
+    });
+
+    test('configureModel persists in config', async () => {
+      await db.configureModel('http://localhost:11434/v1', 'qwen3:1.7b');
+      const cfg = await db.config();
+      expect(cfg.model).not.toBeNull();
+      expect(cfg.model.endpoint).toBe('http://localhost:11434/v1');
+      expect(cfg.model.model).toBe('qwen3:1.7b');
+      expect(cfg.model.timeoutMs).toBe(5000);
+    });
+
+    test('configureModel with api key and timeout', async () => {
+      await db.configureModel('http://localhost:11434/v1', 'qwen3:1.7b', 'sk-test', 10000);
+      const cfg = await db.config();
+      expect(cfg.model.apiKey).toBe('sk-test');
+      expect(cfg.model.timeoutMs).toBe(10000);
+    });
+  });
+
+  // =========================================================================
   // Search
   // =========================================================================
 

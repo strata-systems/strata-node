@@ -183,10 +183,25 @@ export declare class Strata {
   /** Check if a space exists in the current branch. */
   spaceExists(space: string): Promise<boolean>
   /**
+   * Get the current database configuration.
+   *
+   * Returns an object with `durability`, `autoEmbed`, and optional `model`.
+   */
+  config(): Promise<any>
+  /** Check whether auto-embedding is enabled. */
+  autoEmbedEnabled(): Promise<boolean>
+  /**
+   * Enable or disable auto-embedding of text values.
+   *
+   * Persisted to strata.toml for disk-backed databases.
+   */
+  setAutoEmbed(enabled: boolean): Promise<void>
+  /**
    * Configure an inference model endpoint for intelligent search.
    *
    * When a model is configured, `search()` transparently expands queries
    * using the model for better recall. Search works identically without a model.
+   * Persisted to strata.toml.
    */
   configureModel(endpoint: string, model: string, apiKey?: string | undefined | null, timeoutMs?: number | undefined | null): Promise<void>
   /** Search across multiple primitives for matching content. */

@@ -223,6 +223,21 @@ export interface OpenOptions {
   readOnly?: boolean;
 }
 
+/** Database configuration snapshot */
+export interface StrataConfig {
+  durability: string;
+  autoEmbed: boolean;
+  model: ModelConfig | null;
+}
+
+/** Model configuration for query expansion and reranking */
+export interface ModelConfig {
+  endpoint: string;
+  model: string;
+  apiKey: string | null;
+  timeoutMs: number;
+}
+
 // =========================================================================
 // Options types for the new namespace API
 // =========================================================================
@@ -508,6 +523,22 @@ export class Strata {
    * and auto-rollback on error.
    */
   transaction<T>(fn: (tx: Strata) => Promise<T>, opts?: TransactionOptions): Promise<T>;
+
+  // -----------------------------------------------------------------------
+  // Configuration
+  // -----------------------------------------------------------------------
+
+  /** Get the current database configuration. */
+  config(): Promise<StrataConfig>;
+
+  /** Configure an inference model endpoint for query expansion and reranking. Persisted to strata.toml. */
+  configureModel(endpoint: string, model: string, apiKey?: string | null, timeoutMs?: number | null): Promise<void>;
+
+  /** Check whether auto-embedding is enabled. */
+  autoEmbedEnabled(): Promise<boolean>;
+
+  /** Enable or disable auto-embedding. Persisted to strata.toml. */
+  setAutoEmbed(enabled: boolean): Promise<void>;
 
   // -----------------------------------------------------------------------
   // Database Operations

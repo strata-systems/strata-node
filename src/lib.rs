@@ -1857,13 +1857,74 @@ impl Strata {
     }
 
     // =========================================================================
-    // Model Configuration
+    // Configuration
     // =========================================================================
+
+    /// Get the current database configuration.
+    ///
+    /// Returns an object with `durability`, `autoEmbed`, and optional `model`.
+    #[napi]
+    pub async fn config(&self) -> napi::Result<serde_json::Value> {
+        let inner = self.inner.clone();
+        tokio::task::spawn_blocking(move || {
+            let guard = lock_inner(&inner)?;
+            let cfg = guard.config();
+            let mut obj = serde_json::Map::new();
+            obj.insert("durability".into(), serde_json::Value::String(cfg.durability));
+            obj.insert("autoEmbed".into(), serde_json::Value::Bool(cfg.auto_embed));
+            if let Some(model) = cfg.model {
+                let mut m = serde_json::Map::new();
+                m.insert("endpoint".into(), serde_json::Value::String(model.endpoint));
+                m.insert("model".into(), serde_json::Value::String(model.model));
+                m.insert(
+                    "apiKey".into(),
+                    model
+                        .api_key
+                        .map(serde_json::Value::String)
+                        .unwrap_or(serde_json::Value::Null),
+                );
+                m.insert("timeoutMs".into(), serde_json::Value::Number(model.timeout_ms.into()));
+                obj.insert("model".into(), serde_json::Value::Object(m));
+            } else {
+                obj.insert("model".into(), serde_json::Value::Null);
+            }
+            Ok(serde_json::Value::Object(obj))
+        })
+        .await
+        .map_err(|e| napi::Error::from_reason(format!("{}", e)))?
+    }
+
+    /// Check whether auto-embedding is enabled.
+    #[napi(js_name = "autoEmbedEnabled")]
+    pub async fn auto_embed_enabled(&self) -> napi::Result<bool> {
+        let inner = self.inner.clone();
+        tokio::task::spawn_blocking(move || {
+            let guard = lock_inner(&inner)?;
+            Ok(guard.auto_embed_enabled())
+        })
+        .await
+        .map_err(|e| napi::Error::from_reason(format!("{}", e)))?
+    }
+
+    /// Enable or disable auto-embedding of text values.
+    ///
+    /// Persisted to strata.toml for disk-backed databases.
+    #[napi(js_name = "setAutoEmbed")]
+    pub async fn set_auto_embed(&self, enabled: bool) -> napi::Result<()> {
+        let inner = self.inner.clone();
+        tokio::task::spawn_blocking(move || {
+            let guard = lock_inner(&inner)?;
+            guard.set_auto_embed(enabled).map_err(to_napi_err)
+        })
+        .await
+        .map_err(|e| napi::Error::from_reason(format!("{}", e)))?
+    }
 
     /// Configure an inference model endpoint for intelligent search.
     ///
     /// When a model is configured, `search()` transparently expands queries
     /// using the model for better recall. Search works identically without a model.
+    /// Persisted to strata.toml.
     #[napi(js_name = "configureModel")]
     pub async fn configure_model(
         &self,
