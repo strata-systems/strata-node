@@ -644,23 +644,9 @@ impl Strata {
         let as_of_u64 = as_of.map(|t| t as u64);
         tokio::task::spawn_blocking(move || {
             let guard = lock_inner(&inner)?;
-            let branch = Some(BranchId::from(guard.current_branch()));
-            let space = Some(guard.current_space().to_string());
-            match guard
-                .executor()
-                .execute(Command::KvGet {
-                    branch,
-                    space,
-                    key,
-                    as_of: as_of_u64,
-                })
-                .map_err(to_napi_err)?
-            {
-                Output::MaybeVersioned(Some(vv)) => Ok(value_to_js(vv.value)),
-                Output::MaybeVersioned(None) => Ok(serde_json::Value::Null),
-                Output::Maybe(Some(v)) => Ok(value_to_js(v)),
-                Output::Maybe(None) => Ok(serde_json::Value::Null),
-                _ => Err(napi::Error::from_reason("Unexpected output for KvGet")),
+            match guard.kv_get_as_of(&key, as_of_u64).map_err(to_napi_err)? {
+                Some(v) => Ok(value_to_js(v)),
+                None => Ok(serde_json::Value::Null),
             }
         })
         .await
@@ -690,23 +676,9 @@ impl Strata {
         let as_of_u64 = as_of.map(|t| t as u64);
         tokio::task::spawn_blocking(move || {
             let guard = lock_inner(&inner)?;
-            let branch = Some(BranchId::from(guard.current_branch()));
-            let space = Some(guard.current_space().to_string());
-            match guard
-                .executor()
-                .execute(Command::KvList {
-                    branch,
-                    space,
-                    prefix,
-                    cursor: None,
-                    limit: None,
-                    as_of: as_of_u64,
-                })
-                .map_err(to_napi_err)?
-            {
-                Output::Keys(keys) => Ok(keys),
-                _ => Err(napi::Error::from_reason("Unexpected output for KvList")),
-            }
+            guard
+                .kv_list_as_of(prefix.as_deref(), as_of_u64)
+                .map_err(to_napi_err)
         })
         .await
         .map_err(|e| napi::Error::from_reason(format!("{}", e)))?
@@ -762,23 +734,9 @@ impl Strata {
         let as_of_u64 = as_of.map(|t| t as u64);
         tokio::task::spawn_blocking(move || {
             let guard = lock_inner(&inner)?;
-            let branch = Some(BranchId::from(guard.current_branch()));
-            let space = Some(guard.current_space().to_string());
-            match guard
-                .executor()
-                .execute(Command::StateGet {
-                    branch,
-                    space,
-                    cell,
-                    as_of: as_of_u64,
-                })
-                .map_err(to_napi_err)?
-            {
-                Output::MaybeVersioned(Some(vv)) => Ok(value_to_js(vv.value)),
-                Output::MaybeVersioned(None) => Ok(serde_json::Value::Null),
-                Output::Maybe(Some(v)) => Ok(value_to_js(v)),
-                Output::Maybe(None) => Ok(serde_json::Value::Null),
-                _ => Err(napi::Error::from_reason("Unexpected output for StateGet")),
+            match guard.state_get_as_of(&cell, as_of_u64).map_err(to_napi_err)? {
+                Some(v) => Ok(value_to_js(v)),
+                None => Ok(serde_json::Value::Null),
             }
         })
         .await
@@ -877,23 +835,12 @@ impl Strata {
         let as_of_u64 = as_of.map(|t| t as u64);
         tokio::task::spawn_blocking(move || {
             let guard = lock_inner(&inner)?;
-            let branch = Some(BranchId::from(guard.current_branch()));
-            let space = Some(guard.current_space().to_string());
             match guard
-                .executor()
-                .execute(Command::EventGet {
-                    branch,
-                    space,
-                    sequence: sequence as u64,
-                    as_of: as_of_u64,
-                })
+                .event_get_as_of(sequence as u64, as_of_u64)
                 .map_err(to_napi_err)?
             {
-                Output::MaybeVersioned(Some(vv)) => Ok(versioned_to_js(vv)),
-                Output::MaybeVersioned(None) => Ok(serde_json::Value::Null),
-                Output::Maybe(Some(v)) => Ok(serde_json::json!({ "value": value_to_js(v) })),
-                Output::Maybe(None) => Ok(serde_json::Value::Null),
-                _ => Err(napi::Error::from_reason("Unexpected output for EventGet")),
+                Some(vv) => Ok(versioned_to_js(vv)),
+                None => Ok(serde_json::Value::Null),
             }
         })
         .await
@@ -911,28 +858,39 @@ impl Strata {
         let as_of_u64 = as_of.map(|t| t as u64);
         tokio::task::spawn_blocking(move || {
             let guard = lock_inner(&inner)?;
-            let branch = Some(BranchId::from(guard.current_branch()));
-            let space = Some(guard.current_space().to_string());
-            match guard
-                .executor()
-                .execute(Command::EventGetByType {
-                    branch,
-                    space,
-                    event_type,
-                    limit: None,
-                    after_sequence: None,
-                    as_of: as_of_u64,
-                })
-                .map_err(to_napi_err)?
-            {
-                Output::VersionedValues(events) => {
-                    let arr: Vec<serde_json::Value> =
-                        events.into_iter().map(versioned_to_js).collect();
-                    Ok(serde_json::Value::Array(arr))
+            // event_get_by_type_with_options does not support as_of;
+            // fall back to executor when time-travel is requested.
+            if as_of_u64.is_some() {
+                let branch = Some(BranchId::from(guard.current_branch()));
+                let space = Some(guard.current_space().to_string());
+                match guard
+                    .executor()
+                    .execute(Command::EventGetByType {
+                        branch,
+                        space,
+                        event_type,
+                        limit: None,
+                        after_sequence: None,
+                        as_of: as_of_u64,
+                    })
+                    .map_err(to_napi_err)?
+                {
+                    Output::VersionedValues(events) => {
+                        let arr: Vec<serde_json::Value> =
+                            events.into_iter().map(versioned_to_js).collect();
+                        Ok(serde_json::Value::Array(arr))
+                    }
+                    _ => Err(napi::Error::from_reason(
+                        "Unexpected output for EventGetByType",
+                    )),
                 }
-                _ => Err(napi::Error::from_reason(
-                    "Unexpected output for EventGetByType",
-                )),
+            } else {
+                let events = guard
+                    .event_get_by_type(&event_type)
+                    .map_err(to_napi_err)?;
+                let arr: Vec<serde_json::Value> =
+                    events.into_iter().map(versioned_to_js).collect();
+                Ok(serde_json::Value::Array(arr))
             }
         })
         .await
@@ -988,24 +946,12 @@ impl Strata {
         let as_of_u64 = as_of.map(|t| t as u64);
         tokio::task::spawn_blocking(move || {
             let guard = lock_inner(&inner)?;
-            let branch = Some(BranchId::from(guard.current_branch()));
-            let space = Some(guard.current_space().to_string());
             match guard
-                .executor()
-                .execute(Command::JsonGet {
-                    branch,
-                    space,
-                    key,
-                    path,
-                    as_of: as_of_u64,
-                })
+                .json_get_as_of(&key, &path, as_of_u64)
                 .map_err(to_napi_err)?
             {
-                Output::MaybeVersioned(Some(vv)) => Ok(value_to_js(vv.value)),
-                Output::MaybeVersioned(None) => Ok(serde_json::Value::Null),
-                Output::Maybe(Some(v)) => Ok(value_to_js(v)),
-                Output::Maybe(None) => Ok(serde_json::Value::Null),
-                _ => Err(napi::Error::from_reason("Unexpected output for JsonGet")),
+                Some(v) => Ok(value_to_js(v)),
+                None => Ok(serde_json::Value::Null),
             }
         })
         .await
@@ -1668,12 +1614,9 @@ impl Strata {
         let inner = self.inner.clone();
         tokio::task::spawn_blocking(move || {
             let guard = lock_inner(&inner)?;
-            let branch = Some(BranchId::from(guard.current_branch()));
-            let output = guard
-                .executor()
-                .execute(Command::Describe { branch })
-                .map_err(to_napi_err)?;
-            Ok(output_to_json(output))
+            let result = guard.describe().map_err(to_napi_err)?;
+            serde_json::to_value(result)
+                .map_err(|e| napi::Error::from_reason(format!("Failed to serialize DescribeResult: {}", e)))
         })
         .await
         .map_err(|e| napi::Error::from_reason(format!("{}", e)))?
@@ -2177,17 +2120,7 @@ impl Strata {
         let inner = self.inner.clone();
         tokio::task::spawn_blocking(move || {
             let guard = lock_inner(&inner)?;
-            match guard
-                .executor()
-                .execute(Command::SpaceCreate {
-                    branch: None,
-                    space,
-                })
-                .map_err(to_napi_err)?
-            {
-                Output::Unit => Ok(()),
-                _ => Err(napi::Error::from_reason("Unexpected output for SpaceCreate")),
-            }
+            guard.space_create(&space).map_err(to_napi_err)
         })
         .await
         .map_err(|e| napi::Error::from_reason(format!("{}", e)))?
@@ -2199,19 +2132,7 @@ impl Strata {
         let inner = self.inner.clone();
         tokio::task::spawn_blocking(move || {
             let guard = lock_inner(&inner)?;
-            match guard
-                .executor()
-                .execute(Command::SpaceExists {
-                    branch: None,
-                    space,
-                })
-                .map_err(to_napi_err)?
-            {
-                Output::Bool(exists) => Ok(exists),
-                _ => Err(napi::Error::from_reason(
-                    "Unexpected output for SpaceExists",
-                )),
-            }
+            guard.space_exists(&space).map_err(to_napi_err)
         })
         .await
         .map_err(|e| napi::Error::from_reason(format!("{}", e)))?
@@ -2351,32 +2272,20 @@ impl Strata {
                 precomputed_embedding: None,
             };
 
-            match guard
-                .executor()
-                .execute(Command::Search {
-                    branch: None,
-                    space: None,
-                    search: sq,
+            let (hits, _stats) = guard.search(sq).map_err(to_napi_err)?;
+            let arr: Vec<serde_json::Value> = hits
+                .into_iter()
+                .map(|hit| {
+                    serde_json::json!({
+                        "entity": hit.entity,
+                        "primitive": hit.primitive,
+                        "score": hit.score,
+                        "rank": hit.rank,
+                        "snippet": hit.snippet,
+                    })
                 })
-                .map_err(to_napi_err)?
-            {
-                Output::SearchResults { hits, .. } => {
-                    let arr: Vec<serde_json::Value> = hits
-                        .into_iter()
-                        .map(|hit| {
-                            serde_json::json!({
-                                "entity": hit.entity,
-                                "primitive": hit.primitive,
-                                "score": hit.score,
-                                "rank": hit.rank,
-                                "snippet": hit.snippet,
-                            })
-                        })
-                        .collect();
-                    Ok(serde_json::Value::Array(arr))
-                }
-                _ => Err(napi::Error::from_reason("Unexpected output for Search")),
-            }
+                .collect();
+            Ok(serde_json::Value::Array(arr))
         })
         .await
         .map_err(|e| napi::Error::from_reason(format!("{}", e)))?
@@ -2392,16 +2301,7 @@ impl Strata {
         let inner = self.inner.clone();
         tokio::task::spawn_blocking(move || {
             let guard = lock_inner(&inner)?;
-            match guard
-                .executor()
-                .execute(Command::RetentionApply { branch: None })
-                .map_err(to_napi_err)?
-            {
-                Output::Unit => Ok(()),
-                _ => Err(napi::Error::from_reason(
-                    "Unexpected output for RetentionApply",
-                )),
-            }
+            guard.retention_apply().map_err(to_napi_err)
         })
         .await
         .map_err(|e| napi::Error::from_reason(format!("{}", e)))?
@@ -2565,23 +2465,11 @@ impl Strata {
         let inner = self.inner.clone();
         tokio::task::spawn_blocking(move || {
             let guard = lock_inner(&inner)?;
-            let branch = Some(BranchId::from(guard.current_branch()));
-            match guard
-                .executor()
-                .execute(Command::TimeRange { branch })
-                .map_err(to_napi_err)?
-            {
-                Output::TimeRange {
-                    oldest_ts,
-                    latest_ts,
-                } => Ok(serde_json::json!({
-                    "oldestTs": oldest_ts.map(|t| t as i64),
-                    "latestTs": latest_ts.map(|t| t as i64),
-                })),
-                _ => Err(napi::Error::from_reason(
-                    "Unexpected output for TimeRange",
-                )),
-            }
+            let (oldest_ts, latest_ts) = guard.time_range().map_err(to_napi_err)?;
+            Ok(serde_json::json!({
+                "oldestTs": oldest_ts.map(|t| t as i64),
+                "latestTs": latest_ts.map(|t| t as i64),
+            }))
         })
         .await
         .map_err(|e| napi::Error::from_reason(format!("{}", e)))?
@@ -2619,22 +2507,8 @@ impl Strata {
             .collect::<napi::Result<_>>()?;
         tokio::task::spawn_blocking(move || {
             let guard = lock_inner(&inner)?;
-            let branch = Some(BranchId::from(guard.current_branch()));
-            let space = Some(guard.current_space().to_string());
-            match guard
-                .executor()
-                .execute(Command::KvBatchPut {
-                    branch,
-                    space,
-                    entries: batch,
-                })
-                .map_err(to_napi_err)?
-            {
-                Output::BatchResults(results) => Ok(batch_results_to_js(results)),
-                _ => Err(napi::Error::from_reason(
-                    "Unexpected output for KvBatchPut",
-                )),
-            }
+            let results = guard.kv_batch_put(batch).map_err(to_napi_err)?;
+            Ok(batch_results_to_js(results))
         })
         .await
         .map_err(|e| napi::Error::from_reason(format!("{}", e)))?
@@ -2668,22 +2542,8 @@ impl Strata {
             .collect::<napi::Result<_>>()?;
         tokio::task::spawn_blocking(move || {
             let guard = lock_inner(&inner)?;
-            let branch = Some(BranchId::from(guard.current_branch()));
-            let space = Some(guard.current_space().to_string());
-            match guard
-                .executor()
-                .execute(Command::StateBatchSet {
-                    branch,
-                    space,
-                    entries: batch,
-                })
-                .map_err(to_napi_err)?
-            {
-                Output::BatchResults(results) => Ok(batch_results_to_js(results)),
-                _ => Err(napi::Error::from_reason(
-                    "Unexpected output for StateBatchSet",
-                )),
-            }
+            let results = guard.state_batch_set(batch).map_err(to_napi_err)?;
+            Ok(batch_results_to_js(results))
         })
         .await
         .map_err(|e| napi::Error::from_reason(format!("{}", e)))?
@@ -2723,22 +2583,8 @@ impl Strata {
             .collect::<napi::Result<_>>()?;
         tokio::task::spawn_blocking(move || {
             let guard = lock_inner(&inner)?;
-            let branch = Some(BranchId::from(guard.current_branch()));
-            let space = Some(guard.current_space().to_string());
-            match guard
-                .executor()
-                .execute(Command::EventBatchAppend {
-                    branch,
-                    space,
-                    entries: batch,
-                })
-                .map_err(to_napi_err)?
-            {
-                Output::BatchResults(results) => Ok(batch_results_to_js(results)),
-                _ => Err(napi::Error::from_reason(
-                    "Unexpected output for EventBatchAppend",
-                )),
-            }
+            let results = guard.event_batch_append(batch).map_err(to_napi_err)?;
+            Ok(batch_results_to_js(results))
         })
         .await
         .map_err(|e| napi::Error::from_reason(format!("{}", e)))?
@@ -2777,22 +2623,8 @@ impl Strata {
             .collect::<napi::Result<_>>()?;
         tokio::task::spawn_blocking(move || {
             let guard = lock_inner(&inner)?;
-            let branch = Some(BranchId::from(guard.current_branch()));
-            let space = Some(guard.current_space().to_string());
-            match guard
-                .executor()
-                .execute(Command::JsonBatchSet {
-                    branch,
-                    space,
-                    entries: batch,
-                })
-                .map_err(to_napi_err)?
-            {
-                Output::BatchResults(results) => Ok(batch_results_to_js(results)),
-                _ => Err(napi::Error::from_reason(
-                    "Unexpected output for JsonBatchSet",
-                )),
-            }
+            let results = guard.json_batch_set(batch).map_err(to_napi_err)?;
+            Ok(batch_results_to_js(results))
         })
         .await
         .map_err(|e| napi::Error::from_reason(format!("{}", e)))?
@@ -2826,22 +2658,8 @@ impl Strata {
             .collect::<napi::Result<_>>()?;
         tokio::task::spawn_blocking(move || {
             let guard = lock_inner(&inner)?;
-            let branch = Some(BranchId::from(guard.current_branch()));
-            let space = Some(guard.current_space().to_string());
-            match guard
-                .executor()
-                .execute(Command::JsonBatchGet {
-                    branch,
-                    space,
-                    entries: batch,
-                })
-                .map_err(to_napi_err)?
-            {
-                Output::BatchGetResults(results) => Ok(batch_get_results_to_js(results)),
-                _ => Err(napi::Error::from_reason(
-                    "Unexpected output for JsonBatchGet",
-                )),
-            }
+            let results = guard.json_batch_get(batch).map_err(to_napi_err)?;
+            Ok(batch_get_results_to_js(results))
         })
         .await
         .map_err(|e| napi::Error::from_reason(format!("{}", e)))?
@@ -2875,22 +2693,8 @@ impl Strata {
             .collect::<napi::Result<_>>()?;
         tokio::task::spawn_blocking(move || {
             let guard = lock_inner(&inner)?;
-            let branch = Some(BranchId::from(guard.current_branch()));
-            let space = Some(guard.current_space().to_string());
-            match guard
-                .executor()
-                .execute(Command::JsonBatchDelete {
-                    branch,
-                    space,
-                    entries: batch,
-                })
-                .map_err(to_napi_err)?
-            {
-                Output::BatchResults(results) => Ok(batch_results_to_js(results)),
-                _ => Err(napi::Error::from_reason(
-                    "Unexpected output for JsonBatchDelete",
-                )),
-            }
+            let results = guard.json_batch_delete(batch).map_err(to_napi_err)?;
+            Ok(batch_results_to_js(results))
         })
         .await
         .map_err(|e| napi::Error::from_reason(format!("{}", e)))?
@@ -3108,16 +2912,7 @@ impl Strata {
         let inner = self.inner.clone();
         tokio::task::spawn_blocking(move || {
             let guard = lock_inner(&inner)?;
-            match guard
-                .executor()
-                .execute(Command::Detokenize { model, ids })
-                .map_err(to_napi_err)?
-            {
-                Output::Text(text) => Ok(text),
-                _ => Err(napi::Error::from_reason(
-                    "Unexpected output for Detokenize",
-                )),
-            }
+            guard.detokenize(&model, ids).map_err(to_napi_err)
         })
         .await
         .map_err(|e| napi::Error::from_reason(format!("{}", e)))?
@@ -3129,16 +2924,7 @@ impl Strata {
         let inner = self.inner.clone();
         tokio::task::spawn_blocking(move || {
             let guard = lock_inner(&inner)?;
-            match guard
-                .executor()
-                .execute(Command::GenerateUnload { model })
-                .map_err(to_napi_err)?
-            {
-                Output::Bool(b) => Ok(b),
-                _ => Err(napi::Error::from_reason(
-                    "Unexpected output for GenerateUnload",
-                )),
-            }
+            guard.generate_unload(&model).map_err(to_napi_err)
         })
         .await
         .map_err(|e| napi::Error::from_reason(format!("{}", e)))?
@@ -3154,32 +2940,22 @@ impl Strata {
         let inner = self.inner.clone();
         tokio::task::spawn_blocking(move || {
             let guard = lock_inner(&inner)?;
-            match guard
-                .executor()
-                .execute(Command::ModelsList)
-                .map_err(to_napi_err)?
-            {
-                Output::ModelsList(models) => {
-                    let arr: Vec<serde_json::Value> = models
-                        .into_iter()
-                        .map(|m| {
-                            serde_json::json!({
-                                "name": m.name,
-                                "task": m.task,
-                                "architecture": m.architecture,
-                                "defaultQuant": m.default_quant,
-                                "embeddingDim": m.embedding_dim,
-                                "isLocal": m.is_local,
-                                "sizeBytes": m.size_bytes,
-                            })
-                        })
-                        .collect();
-                    Ok(serde_json::Value::Array(arr))
-                }
-                _ => Err(napi::Error::from_reason(
-                    "Unexpected output for ModelsList",
-                )),
-            }
+            let models = guard.models_list().map_err(to_napi_err)?;
+            let arr: Vec<serde_json::Value> = models
+                .into_iter()
+                .map(|m| {
+                    serde_json::json!({
+                        "name": m.name,
+                        "task": m.task,
+                        "architecture": m.architecture,
+                        "defaultQuant": m.default_quant,
+                        "embeddingDim": m.embedding_dim,
+                        "isLocal": m.is_local,
+                        "sizeBytes": m.size_bytes,
+                    })
+                })
+                .collect();
+            Ok(serde_json::Value::Array(arr))
         })
         .await
         .map_err(|e| napi::Error::from_reason(format!("{}", e)))?
@@ -3191,19 +2967,11 @@ impl Strata {
         let inner = self.inner.clone();
         tokio::task::spawn_blocking(move || {
             let guard = lock_inner(&inner)?;
-            match guard
-                .executor()
-                .execute(Command::ModelsPull { name })
-                .map_err(to_napi_err)?
-            {
-                Output::ModelsPulled { name, path } => Ok(serde_json::json!({
-                    "name": name,
-                    "path": path,
-                })),
-                _ => Err(napi::Error::from_reason(
-                    "Unexpected output for ModelsPull",
-                )),
-            }
+            let (name, path) = guard.models_pull(&name).map_err(to_napi_err)?;
+            Ok(serde_json::json!({
+                "name": name,
+                "path": path,
+            }))
         })
         .await
         .map_err(|e| napi::Error::from_reason(format!("{}", e)))?
@@ -3215,32 +2983,22 @@ impl Strata {
         let inner = self.inner.clone();
         tokio::task::spawn_blocking(move || {
             let guard = lock_inner(&inner)?;
-            match guard
-                .executor()
-                .execute(Command::ModelsLocal)
-                .map_err(to_napi_err)?
-            {
-                Output::ModelsList(models) => {
-                    let arr: Vec<serde_json::Value> = models
-                        .into_iter()
-                        .map(|m| {
-                            serde_json::json!({
-                                "name": m.name,
-                                "task": m.task,
-                                "architecture": m.architecture,
-                                "defaultQuant": m.default_quant,
-                                "embeddingDim": m.embedding_dim,
-                                "isLocal": m.is_local,
-                                "sizeBytes": m.size_bytes,
-                            })
-                        })
-                        .collect();
-                    Ok(serde_json::Value::Array(arr))
-                }
-                _ => Err(napi::Error::from_reason(
-                    "Unexpected output for ModelsLocal",
-                )),
-            }
+            let models = guard.models_local().map_err(to_napi_err)?;
+            let arr: Vec<serde_json::Value> = models
+                .into_iter()
+                .map(|m| {
+                    serde_json::json!({
+                        "name": m.name,
+                        "task": m.task,
+                        "architecture": m.architecture,
+                        "defaultQuant": m.default_quant,
+                        "embeddingDim": m.embedding_dim,
+                        "isLocal": m.is_local,
+                        "sizeBytes": m.size_bytes,
+                    })
+                })
+                .collect();
+            Ok(serde_json::Value::Array(arr))
         })
         .await
         .map_err(|e| napi::Error::from_reason(format!("{}", e)))?
